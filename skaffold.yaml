@@ -5,12 +5,14 @@ metadata:
 
 build:
   artifacts:
-  - image: europe-west2-docker.pkg.dev/ejmadkins-refinitiv/hello-world/hello-world
+  - image: europe-west2-docker.pkg.dev/dh-cicd-sandbox/remote-registry/hello-world
     context: .
     jib: {}
   tagPolicy:
-    sha256: {}
-  googleCloudBuild: {}
+    gitCommit:
+      variant: AbbrevCommitSha
+  googleCloudBuild:
+    projectId: dh-cicd-sandbox
 
 profiles:
 - name: staging
