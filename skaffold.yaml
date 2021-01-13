@@ -1,0 +1,25 @@
+apiVersion: skaffold/v2beta10
+kind: Config
+metadata:
+  name: hello-world
+
+build:
+  artifacts:
+  - image: europe-west2-docker.pkg.dev/ejmadkins-refinitiv/hello-world/hello-world
+    context: .
+    jib: {}
+  tagPolicy:
+    sha256: {}
+  googleCloudBuild: {}
+
+profiles:
+- name: staging
+  deploy:
+    kustomize:
+      paths:
+      - kubernetes-manifests/overlays/staging
+- name: prod
+  deploy:
+    kustomize:
+      paths:
+      - kubernetes-manifests/overlays/prod

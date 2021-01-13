@@ -1,0 +1,78 @@
+steps:
+
+- id: 'Deploy application to cluster'
+  name: 'gcr.io/k8s-skaffold/skaffold:v1.17.1'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+     skaffold render -f=skaffold.yaml -p=prod --loud=true --output=kubernetes-manifests/deploy/k8s-manifests.yaml
+
+- name: gcr.io/cloud-builders/gcloud
+  entrypoint: 'bash'
+  args: [ '-c', 'gcloud secrets versions access latest --secret=github-ssh-key > /root/.ssh/id_github' ]
+  volumes:
+  - name: 'ssh'
+    path: /root/.ssh
+
+# Set up git with key and domain
+- name: 'gcr.io/cloud-builders/git'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - |
+    chmod 600 /root/.ssh/id_github
+    cat <<EOF >/root/.ssh/config
+    Hostname github.com
+    IdentityFile /root/.ssh/id_github
+    EOF
+    ssh-keyscan -t rsa github.com > /root/.ssh/known_hosts
+  volumes:
+  - name: 'ssh'
+    path: /root/.ssh
+
+- name: 'gcr.io/cloud-builders/gcloud'
+  id: Clone env repository
+  entrypoint: /bin/sh
+  args:
+  - '-c'
+  - |
+    git clone https://github.com/ejmadkins/env-repo.git && \
+    cd env-repo && \
+    git checkout candidate && \
+    git config user.email "ejmadkins@google.com"
+
+- name: 'gcr.io/cloud-builders/gcloud'
+  id: Copy manifest to env-repo
+  entrypoint: /bin/sh
+  args:
+  - '-c'
+  - |
+     cp kubernetes-manifests/deploy/k8s-manifests.yaml env-repo/k8s-manifests.yaml
+
+- id: 'Add manifests and check-in'
+  name: 'gcr.io/cloud-builders/git'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - >
+    cp kubernetes-manifests/deploy/k8s-manifests.yaml env-repo/k8s-manifests.yaml && \
+    git add cloud-build-skaffold/k8s-manifests.yaml && \
+    git commit -m "update kubernetes manifests"
+ 
+- id: 'Push to Git'
+  name: 'gcr.io/cloud-builders/git'
+  entrypoint: 'bash'
+  args:
+  - '-c'
+  - >
+    set -x && \
+    cd env-repo && \
+    git add k8s-manifests.yaml && \
+    git commit -m "Deploying image ${SHORT_SHA} && \
+    Built from commit ${COMMIT_SHA} of repository app-repo && \
+    Author: $(git log --format='%an <%ae>' -n 1 HEAD)" && \
+    git push git@github.com:ejmadkins/env-repo.git candidate
+  volumes:
+  - name: 'ssh'
+    path: /root/.ssh
